@@ -8,8 +8,8 @@ const vectorSearchStep = createStep({
   inputSchema: z.object({
     query: z.string(),
     documentId: z.string().optional(),
+    userType: z.string().optional(),
     jurisdiction: z.string().optional(),
-    topK: z.number().default(5),
   }),
   outputSchema: z.object({
     chunks: z.array(z.object({
@@ -48,8 +48,15 @@ const contextFormattingStep = createStep({
   id: 'format-context',
   description: 'Format retrieved chunks for LLM context',
   inputSchema: z.object({
-    chunks: z.array(z.any()),
-    query: z.string(),
+    chunks: z.array(z.object({
+      content: z.string(),
+      metadata: z.object({
+        pageNumber: z.number(),
+        sectionTitle: z.string(),
+        jurisdiction: z.string().optional(),
+      }),
+      score: z.number(),
+    })),
   }),
   outputSchema: z.object({
     context: z.string(),
@@ -80,9 +87,11 @@ const responseGenerationStep = createStep({
   description: 'Generate response with citations',
   inputSchema: z.object({
     context: z.string(),
-    citations: z.array(z.any()),
-    query: z.string(),
-    userType: z.string().optional(),
+    citations: z.array(z.object({
+      pageNumber: z.number(),
+      section: z.string(),
+      preview: z.string(),
+    })),
   }),
   outputSchema: z.object({
     response: z.string(),
@@ -90,15 +99,11 @@ const responseGenerationStep = createStep({
     shouldGenerateChart: z.boolean(),
   }),
   execute: async ({ inputData }) => {
-    // Determine if a chart would be helpful
-    const shouldGenerateChart =
-      inputData.query.toLowerCase().includes('compare') ||
-      inputData.query.toLowerCase().includes('trend') ||
-      inputData.query.toLowerCase().includes('breakdown') ||
-      inputData.query.toLowerCase().includes('distribution');
+    // For now, assume no chart generation needed since we don't have query context
+    const shouldGenerateChart = false;
 
     // For now, return a placeholder response
-    const response = `Based on the budget documents:\n\n${inputData.context}\n\nThis information answers your question about: ${inputData.query}`;
+    const response = `Based on the budget documents:\n\n${inputData.context}`;
 
     return {
       response,

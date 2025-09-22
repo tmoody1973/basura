@@ -85,11 +85,9 @@ export function ComparisonCharts({ documents, compareBy, showDifferencesOnly }: 
 
   // Calculate differences between first two documents
   const differences = Object.keys(documents[0].departments).map((dept) => {
-    \
-    const doc1Value = documents[0].departments[dept as keyof typeof documents[0].departments
-    ]\
-    const doc2Value = documents[1].departments[dept as keyof typeof documents[1].departments
-    ]
+    const deptKey = dept as keyof Document['departments']
+    const doc1Value = documents[0].departments[deptKey]
+    const doc2Value = documents[1] ? documents[1].departments[deptKey] : 0
     const difference = doc2Value - doc1Value
     const percentChange = doc1Value > 0 ? (difference / doc1Value) * 100 : 0
 

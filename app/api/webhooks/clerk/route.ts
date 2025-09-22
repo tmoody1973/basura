@@ -38,8 +38,8 @@ export async function POST(req: NextRequest) {
 
   if (eventType === 'user.created') {
     try {
-      const email = email_addresses[0]?.email_address
-      const fullName = `${first_name || ''} ${last_name || ''}`.trim()
+      const email = email_addresses[0]?.email_address || 'no-email@example.com'
+      const fullName = `${first_name || ''} ${last_name || ''}`.trim() || 'Unknown User'
 
       // Check if this is the first user (make them admin)
       const { data: existingProfiles } = await getSupabaseAdmin()
@@ -50,7 +50,20 @@ export async function POST(req: NextRequest) {
       const isFirstUser = !existingProfiles || existingProfiles.length === 0
       const role = isFirstUser ? 'admin' : 'user'
 
-      await createUserProfile(id, email, fullName, 'citizen', role)
+      // Use admin client to bypass RLS
+      const { data, error } = await getSupabaseAdmin()
+        .from('profiles')
+        .insert({
+          clerk_user_id: id,
+          email,
+          full_name: fullName,
+          user_type: 'citizen',
+          role: role,
+        })
+        .select()
+        .single()
+
+      if (error) throw error
 
       console.log(`User profile created for ${email} with role: ${role}`)
     } catch (error) {
