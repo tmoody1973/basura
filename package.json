@@ -6,12 +6,22 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:documents": "tsx scripts/test-document-system.ts",
+    "setup:storage": "tsx scripts/setup-storage.ts",
+    "test:llamaparse": "tsx scripts/test-llamaparse.ts",
+    "test:genkit": "tsx scripts/test-genkit-setup.ts",
+    "test:genkit-basic": "tsx scripts/test-genkit-basic.ts",
+    "test:genkit-flows": "tsx scripts/test-genkit-flows.ts",
+    "test:genkit-simple": "tsx scripts/test-genkit-simple.ts",
+    "test:supabase-env": "tsx scripts/test-supabase-env.ts",
+    "test:genkit-apis": "tsx scripts/test-genkit-apis.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "^2.0.32",
     "@clerk/nextjs": "^6.32.0",
     "@elevenlabs/client": "^0.6.2",
+    "@genkit-ai/compat-oai": "^1.19.3",
     "@hookform/resolvers": "^3.10.0",
     "@mastra/core": "^0.17.1",
     "@mastra/memory": "^0.15.2",
@@ -45,6 +55,7 @@
     "@radix-ui/react-toggle-group": "1.1.1",
     "@radix-ui/react-tooltip": "1.1.6",
     "@supabase/supabase-js": "^2.57.4",
+    "@types/uuid": "^10.0.0",
     "@vercel/analytics": "1.3.1",
     "ai": "^5.0.48",
     "autoprefixer": "^10.4.20",
@@ -55,7 +66,9 @@
     "dotenv": "^17.2.2",
     "embla-carousel-react": "8.5.1",
     "geist": "^1.3.1",
+    "genkit": "^1.19.3",
     "input-otp": "1.4.1",
+    "llama-parse": "^0.1.0",
     "llamaindex": "^0.12.0",
     "lucide-react": "^0.454.0",
     "next": "14.2.25",
@@ -71,6 +84,7 @@
     "svix": "^1.76.1",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
+    "uuid": "^13.0.0",
     "vaul": "^0.9.9",
     "zod": "3.25.67"
   },
@@ -82,6 +96,7 @@
     "eslint": "^9.36.0",
     "postcss": "^8.5",
     "tailwindcss": "^4.1.9",
+    "tsx": "^4.20.5",
     "tw-animate-css": "1.3.3",
     "typescript": "^5"
   }

@@ -1,0 +1,230 @@
+import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
+import { ragFlow } from '@/lib/genkit/flows/rag-flow';
+import { getSupabaseAdmin } from '@/lib/supabase/client';
+
+export async function POST(req: NextRequest) {
+  try {
+    // Parse request
+    const { message, documentId, threadId, userType, jurisdiction } = await req.json();
+
+    if (!message || !documentId) {
+      return NextResponse.json(
+        { error: 'Message and documentId are required' },
+        { status: 400 }
+      );
+    }
+
+    // Optional: Check authentication (currently disabled to match existing behavior)
+    let userId = 'anonymous';
+    try {
+      const authResult = await auth();
+      if (authResult?.userId) {
+        userId = authResult.userId;
+      }
+    } catch (error) {
+      console.log('Auth not available, proceeding as anonymous user');
+    }
+
+    // Validate document exists and is accessible
+    const supabase = getSupabaseAdmin();
+    const { data: document, error: docError } = await supabase
+      .from('documents')
+      .select('id, name, processing_status, jurisdiction_name, jurisdiction_type')
+      .eq('id', documentId)
+      .single();
+
+    if (docError || !document) {
+      return NextResponse.json(
+        { error: 'Document not found or not accessible' },
+        { status: 404 }
+      );
+    }
+
+    if (document.processing_status !== 'processed') {
+      return NextResponse.json(
+        {
+          error: 'Document is not ready for analysis',
+          status: document.processing_status
+        },
+        { status: 400 }
+      );
+    }
+
+    // Call Genkit RAG flow
+    console.log(`🔍 Processing RAG query: "${message}" for document: ${document.name}`);
+
+    const ragResult = await ragFlow({
+      query: message,
+      documentId: documentId,
+      userType: (userType as 'student' | 'journalist' | 'citizen') || 'citizen',
+      jurisdiction: jurisdiction || document.jurisdiction_name,
+      maxChunks: 5,
+    });
+
+    // Format response for frontend
+    const response = {
+      success: true,
+      answer: ragResult.answer,
+      citations: ragResult.citations,
+      confidence: ragResult.confidence,
+      documentContext: {
+        id: document.id,
+        name: document.name,
+        jurisdiction: document.jurisdiction_name,
+        jurisdictionType: document.jurisdiction_type,
+      },
+      visualizationSuggestion: ragResult.visualizationSuggestion,
+      threadId: threadId || `thread-${Date.now()}`,
+      generatedAt: new Date().toISOString(),
+    };
+
+    // Optional: Store conversation for future reference
+    if (userId !== 'anonymous') {
+      try {
+        // Get user profile ID
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('clerk_user_id', userId)
+          .single();
+
+        if (profile) {
+          // Store conversation
+          const { data: conversation } = await supabase
+            .from('conversations')
+            .upsert({
+              user_id: profile.id,
+              document_id: documentId,
+              thread_id: threadId || response.threadId,
+              title: message.substring(0, 100) + (message.length > 100 ? '...' : ''),
+            }, {
+              onConflict: 'thread_id',
+              ignoreDuplicates: false
+            })
+            .select()
+            .single();
+
+          if (conversation) {
+            // Store messages
+            await supabase
+              .from('messages')
+              .insert([
+                {
+                  conversation_id: conversation.id,
+                  role: 'user',
+                  content: message,
+                },
+                {
+                  conversation_id: conversation.id,
+                  role: 'assistant',
+                  content: ragResult.answer,
+                  metadata: {
+                    citations: ragResult.citations,
+                    confidence: ragResult.confidence,
+                    visualization_suggestion: ragResult.visualizationSuggestion,
+                  },
+                },
+              ]);
+          }
+        }
+      } catch (conversationError) {
+        console.error('Failed to store conversation:', conversationError);
+        // Don't fail the main request if conversation storage fails
+      }
+    }
+
+    console.log(`✅ RAG response generated with confidence: ${ragResult.confidence}%`);
+    return NextResponse.json(response);
+
+  } catch (error) {
+    console.error('Chat API error:', error);
+
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Internal server error during chat processing',
+        details: error instanceof Error ? error.message : 'Unknown error'
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// Streaming version for real-time responses
+export async function PUT(req: NextRequest) {
+  try {
+    const { message, documentId, userType } = await req.json();
+
+    if (!message || !documentId) {
+      return new Response('Message and documentId are required', { status: 400 });
+    }
+
+    // Create streaming response
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          // Send initial status
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({ type: 'status', message: 'Processing query...' })}\n\n`)
+          );
+
+          // Process with Genkit RAG flow
+          const ragResult = await ragFlow({
+            query: message,
+            documentId: documentId,
+            userType: (userType as 'student' | 'journalist' | 'citizen') || 'citizen',
+            maxChunks: 5,
+          });
+
+          // Stream the answer in chunks to simulate real-time generation
+          const words = ragResult.answer.split(' ');
+          const chunkSize = 5; // Words per chunk
+
+          for (let i = 0; i < words.length; i += chunkSize) {
+            const chunk = words.slice(i, i + chunkSize).join(' ');
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify({ type: 'content', chunk })}\n\n`)
+            );
+
+            // Small delay to simulate streaming
+            await new Promise(resolve => setTimeout(resolve, 50));
+          }
+
+          // Send final metadata
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({
+              type: 'complete',
+              citations: ragResult.citations,
+              confidence: ragResult.confidence,
+              visualization: ragResult.visualizationSuggestion
+            })}\n\n`)
+          );
+
+        } catch (error) {
+          controller.enqueue(
+            encoder.encode(`data: ${JSON.stringify({
+              type: 'error',
+              error: error instanceof Error ? error.message : 'Unknown error'
+            })}\n\n`)
+          );
+        } finally {
+          controller.close();
+        }
+      },
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
+
+  } catch (error) {
+    console.error('Streaming chat error:', error);
+    return new Response('Internal server error', { status: 500 });
+  }
+}

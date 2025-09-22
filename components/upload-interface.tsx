@@ -85,19 +85,71 @@ export function UploadInterface() {
     }
   }
 
-  const simulateProcessing = async () => {
-    const stages: ProcessingStage[] = ["uploading", "extracting", "analyzing", "indexing", "complete"]
+  const handleUpload = async () => {
+    if (!selectedFile) return;
 
-    for (let i = 0; i < stages.length; i++) {
-      setProcessingStage(stages[i])
-      setProgress((i + 1) * 20)
-      await new Promise((resolve) => setTimeout(resolve, 1500))
-    }
-  }
+    try {
+      setProcessingStage("uploading");
+      setProgress(20);
 
-  const handleUpload = () => {
-    if (selectedFile) {
-      simulateProcessing()
+      // Prepare form data
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('documentType', 'budget');
+      formData.append('jurisdiction', jurisdiction === 'auto' ? '' : jurisdiction);
+      formData.append('fiscalYear', new Date().getFullYear().toString());
+      formData.append('description', `Uploaded ${selectedFile.name}`);
+
+      // Upload document
+      const uploadResponse = await fetch('/api/documents/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!uploadResponse.ok) {
+        const errorData = await uploadResponse.json();
+        throw new Error(errorData.error || 'Upload failed');
+      }
+
+      const uploadResult = await uploadResponse.json();
+      setProgress(60);
+      setProcessingStage("extracting");
+
+      // Process document with Genkit
+      const processResponse = await fetch(`/api/documents/${uploadResult.document.id}/process-genkit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      setProgress(80);
+      setProcessingStage("analyzing");
+
+      if (processResponse.ok) {
+        setProgress(100);
+        setProcessingStage("complete");
+
+        // Navigate to dashboard after successful upload and processing
+        setTimeout(() => {
+          window.location.href = `/dashboard?document=${uploadResult.document.id}`;
+        }, 2000);
+      } else {
+        // If processing fails, still show the document was uploaded
+        setProgress(100);
+        setProcessingStage("complete");
+        console.warn('Document uploaded but processing failed');
+
+        setTimeout(() => {
+          window.location.href = `/dashboard?document=${uploadResult.document.id}`;
+        }, 2000);
+      }
+
+    } catch (error) {
+      console.error('Upload error:', error);
+      setProcessingStage("idle");
+      setProgress(0);
+      alert(`Upload failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     }
   }
 
