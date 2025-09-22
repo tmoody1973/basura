@@ -12,7 +12,6 @@ import { Progress } from "@/components/ui/progress"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { Label } from "@/components/ui/label"
 import { DocumentLibrary } from "./document-library"
-import { getUserRole } from "@/lib/supabase/database"
 
 type ProcessingStage = "idle" | "uploading" | "extracting" | "analyzing" | "indexing" | "complete"
 
@@ -38,11 +37,21 @@ export function UploadInterface() {
     const checkUserRole = async () => {
       if (user?.id) {
         try {
-          const role = await getUserRole(user.id)
-          setUserRole(role)
+          const response = await fetch('/api/user/role')
+          if (response.ok) {
+            const data = await response.json()
+            setUserRole(data.role)
+          } else {
+            // If API fails, default to 'user' role
+            setUserRole('user')
+          }
         } catch (error) {
           console.error('Error fetching user role:', error)
+          setUserRole('user')
         }
+      } else {
+        // If not logged in, default to 'user' role
+        setUserRole('user')
       }
       setRoleLoading(false)
     }

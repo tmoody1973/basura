@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { FileText, Building2, Calendar, User, Search } from 'lucide-react'
-import { getAllProcessedDocuments } from '@/lib/supabase/database'
 
 interface Document {
   id: string
@@ -40,8 +39,11 @@ export function DocumentLibrary({ onSelectDocument }: DocumentLibraryProps) {
 
   const loadDocuments = async () => {
     try {
-      const data = await getAllProcessedDocuments()
-      setDocuments(data || [])
+      const response = await fetch('/api/documents/all')
+      if (response.ok) {
+        const data = await response.json()
+        setDocuments(data.documents || [])
+      }
     } catch (error) {
       console.error('Error loading documents:', error)
     } finally {
@@ -56,7 +58,7 @@ export function DocumentLibrary({ onSelectDocument }: DocumentLibraryProps) {
     return matchesSearch && matchesJurisdiction
   })
 
-  const jurisdictionTypes = [...new Set(documents.map(doc => doc.jurisdiction_type).filter(Boolean))]
+  const jurisdictionTypes = Array.from(new Set(documents.map(doc => doc.jurisdiction_type).filter(Boolean)))
 
   const formatFileSize = (bytes: number) => {
     const mb = bytes / (1024 * 1024)

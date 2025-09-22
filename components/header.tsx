@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { FileText, BarChart3, Upload, Settings } from 'lucide-react'
-import { getUserRole } from '@/lib/supabase/database'
 
 export function Header() {
   const { isSignedIn, user } = useUser()
@@ -15,11 +14,19 @@ export function Header() {
     const checkUserRole = async () => {
       if (user?.id) {
         try {
-          const role = await getUserRole(user.id)
-          setUserRole(role)
+          const response = await fetch('/api/user/role')
+          if (response.ok) {
+            const data = await response.json()
+            setUserRole(data.role)
+          } else {
+            setUserRole('user')
+          }
         } catch (error) {
           console.error('Error fetching user role:', error)
+          setUserRole('user')
         }
+      } else {
+        setUserRole('user')
       }
     }
 
